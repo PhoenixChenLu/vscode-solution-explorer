@@ -13,6 +13,7 @@ export { TreeItemCollapsibleState, Command } from "vscode";
 export abstract class TreeItem extends vscode.TreeItem {
 	private _allowIconTheme: boolean = true;
 	protected children: TreeItem[] | null = null;
+	public description: string | undefined;
 
 	constructor(
 		protected context: TreeItemContext,

@@ -25,13 +25,11 @@ export class SolutionExplorerProvider extends vscode.Disposable implements vscod
 		super(() => this.dispose());
 		vscode.window.onDidChangeActiveTextEditor(() => this.onActiveEditorChanged());
 		//vscode.window.onDidChangeVisibleTextEditors(data => this.onVisibleEditorsChanged(data));
-    }
+	}
 
 	public get onDidChangeTreeData(): vscode.Event<sln.TreeItem | undefined> {
 		return this._onDidChangeTreeData.event;
 	}
-
-
 
 	public register() {
 		if (!this.solutionFinder) { return; }
@@ -68,6 +66,33 @@ export class SolutionExplorerProvider extends vscode.Disposable implements vscod
 				}
 				vscode.commands.executeCommand('setContext', 'solutionExplorer.selectionContext', selectionContext);
 			})
+		}
+
+		this.autoFindAndLoadCsprojFiles();
+	}
+
+	private async autoFindAndLoadCsprojFiles() {
+		const workspaceFolders = vscode.workspace.workspaceFolders;
+		if (!workspaceFolders) return;
+
+		for (const folder of workspaceFolders) {
+			const csprojFiles = await vscode.workspace.findFiles(
+				new vscode.RelativePattern(folder, '**/*.csproj'),
+				'**/node_modules/**'
+			);
+
+			for (const csprojFile of csprojFiles) {
+				try {
+					const content = await vscode.workspace.fs.readFile(csprojFile);
+					const xmlContent = content.toString();
+					if (xmlContent.includes('<DependentUpon>')) {
+						this.refresh();
+						break;
+					}
+				} catch (error) {
+					this.logger.error(`Error reading csproj file: ${csprojFile.fsPath}`, error);
+				}
+			}
 		}
 	}
 

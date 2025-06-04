@@ -7,6 +7,9 @@ export class ProjectFileTreeItem extends TreeItem {
         if (projectFile.isLink) {
             this.description = "link";
         }
+        if (projectFile.dependentUpon) {
+            this.description = "dependent";
+        }
 
         this.addContextValueSuffix();
     }
@@ -21,7 +24,9 @@ export class ProjectFileTreeItem extends TreeItem {
         const result: TreeItem[] = [];
         if(this.relatedFiles.length > 0) {
             this.relatedFiles.forEach(f => {
-                result.push(new ProjectFileTreeItem(this.context, f));
+                const item = new ProjectFileTreeItem(this.context, f);
+                item.description = "dependent";
+                result.push(item);
             });
         }
 

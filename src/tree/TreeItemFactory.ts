@@ -87,85 +87,56 @@ export async function createItemsFromProject(context: TreeItemContext, project: 
     const result: TreeItem[] = [];
     const items = await project.getProjectItemEntries();
     const isFolder = (item:ProjectItemEntry) => item.isDirectory && path.dirname(item.relativePath) === virtualPath;
-    const isFile = (item:ProjectItemEntry) => !item.isDirectory && path.dirname(item.relativePath) === virtualPath && !item.dependentUpon;
+    const isFile = (item:ProjectItemEntry) => !item.isDirectory && path.dirname(item.relativePath) === virtualPath;
     const folders = items.filter(isFolder);
     const files = items.filter(isFile);
 
-    const useNesting = getItemNesting();
-    const allRelatedFiles: ProjectItemEntry[] = [];
-    const pushFileWithRelated = (file: ProjectItemEntry) =>{
-        const related: ProjectItemEntry[] = getDependants(items, file.fullPath);
-        if (useNesting) {
-            related.push(...getNestedFiles(files, file.relativePath));
-        }
+    // 首先处理文件夹
+    folders.sort((a, b) => {
+        const x = a.name.toLowerCase();
+        const y = b.name.toLowerCase();
+        return x < y ? -1 : x > y ? 1 : 0;
+    });
 
-        if (related.length > 0) {
-            related.forEach(r => {
-                const iIndex = items.findIndex(i => i.fullPath === r.fullPath);
-                if (iIndex >= 0) {
-                    items.splice(iIndex, 1);
-                }
-                const rIndex = result.findIndex(i => i.path === r.fullPath);
-                if (rIndex >= 0) {
-                    result.splice(rIndex, 1);
-                }
-            });
-            allRelatedFiles.push(...related);
-        }
+    folders.forEach(folder => {
+        result.push(new ProjectFolderTreeItem(context, folder));
+    });
 
-        if (allRelatedFiles.find(i => i.fullPath === file.fullPath)) {
-            return;
-        }
+    // 处理文件，考虑 DependentUpon 关系
+    const processedFiles = new Set<string>();
+    const fileMap = new Map<string, ProjectItemEntry>();
+    
+    // 首先创建文件映射
+    files.forEach(file => {
+        fileMap.set(file.fullPath, file);
+    });
 
-        if (result.find(i => i.path === file.fullPath)) {
-            return;
-        }
+    // 处理主文件和依赖文件
+    files.forEach(file => {
+        if (processedFiles.has(file.fullPath)) return;
 
-        result.push(new ProjectFileTreeItem(context, file, related));
-    };
+        const related: ProjectItemEntry[] = [];
+        let currentFile = file;
 
-    if (project.extension.toLocaleLowerCase() !== 'fsproj') {
-        const head = ['properties','wwwroot']
-        folders.sort((a, b) => {
-            const x : string = a.name.toLowerCase();
-            const y : string = b.name.toLowerCase();
-            const hx = head.indexOf(x);
-            const hy = head.indexOf(y);
-            if (hx >= 0 && hy >= 0) {
-                return hx - hy;
-            } else if (hx >= 0) {
-                return -1;
-            } else if (hy >= 0) {
-                return 1;
+        // 收集所有相关文件
+        while (currentFile.dependentUpon) {
+            const dependentPath = path.join(path.dirname(currentFile.fullPath), currentFile.dependentUpon);
+            const dependentFile = fileMap.get(dependentPath);
+            if (dependentFile) {
+                related.push(dependentFile);
+                processedFiles.add(dependentFile.fullPath);
+                currentFile = dependentFile;
             } else {
-                return  x < y ? -1 : x > y ? 1 : 0;
+                break;
             }
-        });
+        }
 
-        files.sort((a, b) => {
-            const x : string = a.name.toLowerCase();
-            const y : string = b.name.toLowerCase();
-            return  x < y ? -1 : x > y ? 1 : 0;
-        });
-
-        folders.forEach(folder => {
-            result.push(new ProjectFolderTreeItem(context, folder));
-        });
-        files.forEach(pushFileWithRelated);
-    }
-    else{
-        items.forEach(item => {
-            if(isFile(item)){
-                pushFileWithRelated(item)
-            }
-            else if(isFolder(item)){
-                result.push(new ProjectFolderTreeItem(context, item));
-            }
-            else{
-                // do nothing
-            }
-        })
-    }
+        // 添加主文件及其相关文件
+        if (!processedFiles.has(file.fullPath)) {
+            result.push(new ProjectFileTreeItem(context, file, related));
+            processedFiles.add(file.fullPath);
+        }
+    });
 
     return result;
 }
